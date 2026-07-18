@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>PHỎM v1</title>
+
+<style>
+  /* ============================================
+     STYLESHEET - Tùy chỉnh tại đây
+     ============================================ */
+
+  :root {
+    --page-bg: #f4f4f2;
+    --card-bg: #ffffff;
+    --border-color: #e5e5e0;
+    --text-main: #222222;
+    --text-muted: #777777;
+    --color-positive: #1d9e75;
+    --color-negative: #c0392b;
+    --font-size-input: 24px;   /* cỡ chữ ô nhập điểm từng ván */
+    --font-size-header: 28px;  /* cỡ chữ hàng tên + hàng tổng điểm */
+    --sticky-height: 0px;      /* tự tính bằng JS, dùng để chống che bàn phím */
+  }
+
+  /* --- Màu 4 cột theo tông CMYK --- */
+  .col-cyan    { background: #00AEEF; color: #00303f; }
+  .col-magenta { background: #EC008C; color: #4b0030; }
+  .col-yellow  { background: #FFF200; color: #4a4600; }
+  .col-key     { background: #333333; color: #ffffff; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--page-bg);
+    margin: 0;
+    padding: 16px;
+    color: var(--text-main);
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+    margin: 0 0 12px;
+  }
+
+  /* --- Thanh sticky: dính cố định khi cuộn --- */
+  .sticky-bar {
+    position: sticky;
+    top: 0;
+    background: var(--page-bg);
+    padding-bottom: 10px;
+    z-index: 10;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .stat {
+    background: var(--card-bg);
+    border-radius: 10px;
+    padding: 4px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+  }
+  .stat .label { font-size: 13px; color: var(--text-muted); }
+  .stat .value { font-size: 22px; font-weight: 600; margin-top: 2px; }
+
+  .buttons {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  button {
+    flex: 1;
+    padding: 14px 10px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    background: var(--card-bg);
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-main);
+  }
+  button:active { background: #eee; }
+  #addRow { background: var(--color-positive); color: #fff; border: none; }
+  #clearAll { color: var(--color-negative); }
+
+  /* --- Hàng tên người chơi (4 màu CMYK) --- */
+  .name-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .name-cell { padding: 3px 3px; text-align: center; }
+  .name-cell input {
+    width: 100%;
+    text-align: center;
+    font-size: var(--font-size-header);
+    font-weight: 600;
+    background: transparent;
+    border: none;
+    color: inherit;
+  }
+
+  /* --- Hàng tổng điểm --- */
+  .total-row { 
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-top: 4px;
+  }
+  .total-cell {
+    font-size: var(--font-size-header);
+    font-weight: 600;
+    text-align: center;
+    padding: 8px 4px;
+  }
+
+  /* --- Bảng nhập điểm từng ván --- */
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  td { padding: 5px 4px; text-align: center; vertical-align: middle; }
+  .rownum { display: none;
+    width: 26px;
+    color: var(--text-muted);
+    font-size: 14px;
+    text-align: center;
+    vertical-align: middle;
+  }
+  tbody tr:nth-child(even) td:not(.rownum):not(.delcell) { background: #fafaf8; }
+
+  /* --- Ô nhập điểm: nút đổi dấu + ô nhập số --- */
+  .score-cell {
+    display: flex;
+    align-items: stretch;
+    gap: 3px;
+  }
+  .sign-btn {
+    flex: 0 0 30px;
+    padding: 0;
+    min-height: 48px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: #f0f0ee;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1;
+  }
+  .sign-btn.is-negative {
+    background: #fbe4e1;
+    color: var(--color-negative);
+    border-color: #f0c4bf;
+  }
+  .score-input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 48px;
+    min-width: 0;
+    text-align: center;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: var(--font-size-input);
+    padding: 6px 2px;
+    scroll-margin-top: var(--sticky-height);
+  }
+  .score-input.is-negative { color: var(--color-negative); }
+
+  .delcell { width: 34px; display: none; }
+  .delbtn {
+    border: none;
+    background: none;
+    color: var(--color-negative);
+    font-size: 22px;
+    padding: 8px;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .saved-note {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Gud Luck, bro!!!</h1>
+
+  <div class="sticky-bar" id="stickyBar">
+    <div class="stats">
+      <div class="stat">
+        <div class="label">Ván</div>
+        <div class="value" id="vanCount">0</div>
+      </div>
+      <div class="stat">
+        <div class="label">Tổng = 0</div>
+        <div class="value" id="checkSum">0</div>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="addRow" type="button">+ Thêm ván</button>
+      <button id="clearAll" type="button">Xóa hết</button>
+    </div>
+
+    <div class="name-row" id="nameRow"></div>
+    <div class="total-row" id="totalRow"></div>
+  </div>
+
+  <table>
+    <tbody id="bodyRows"></tbody>
+  </table>
+
+  <div class="saved-note" id="savedNote"></div>
+</div>
+
+<script>
+  var STORAGE_KEY = "phom_score_data_v3";
+  var colorClasses = ["col-cyan", "col-magenta", "col-yellow", "col-key"];
+  var names = ["N", "Ma", "Tu", "Nu"];
+  var rows = [];
+
+  function loadData() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        var data = JSON.parse(raw);
+        if (data.names && data.rows) {
+          names = data.names;
+          rows = data.rows;
+        }
+      }
+    } catch (e) {
+      console.error("Không đọc được dữ liệu đã lưu:", e);
+    }
+  }
+
+  function saveData() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ names: names, rows: rows }));
+      var note = document.getElementById("savedNote");
+      note.textContent = "Đã lưu lúc " + new Date().toLocaleTimeString("vi-VN");
+    } catch (e) {
+      console.error("Lỗi khi lưu:", e);
+    }
+  }
+
+  function render() {
+    var nameRow = document.getElementById("nameRow");
+    nameRow.innerHTML = "";
+    names.forEach(function (n, i) {
+      var cell = document.createElement("div");
+      cell.className = "name-cell " + colorClasses[i];
+      var inp = document.createElement("input");
+      inp.value = n;
+      inp.oninput = function (e) {
+        names[i] = e.target.value;
+        saveData();
+      };
+      cell.appendChild(inp);
+      nameRow.appendChild(cell);
+    });
+
+    var body = document.getElementById("bodyRows");
+    body.innerHTML = "";
+    rows.forEach(function (row, ri) {
+      var tr = document.createElement("tr");
+
+      var tdNum = document.createElement("td");
+      tdNum.className = "rownum";
+      tdNum.textContent = ri + 1;
+      tr.appendChild(tdNum);
+
+      row.forEach(function (val, ci) {
+        var td = document.createElement("td");
+        var scoreCell = document.createElement("div");
+        scoreCell.className = "score-cell";
+
+        var signBtn = document.createElement("button");
+        signBtn.type = "button";
+        signBtn.className = "sign-btn";
+        var isNeg = val < 0;
+        signBtn.textContent = isNeg ? "\u2212" : "+";
+        if (isNeg) signBtn.classList.add("is-negative");
+
+        var inp = document.createElement("input");
+        inp.type = "text";
+        inp.inputMode = "numeric";
+        inp.pattern = "[0-9]*";
+        inp.className = "score-input";
+        if (isNeg) inp.classList.add("is-negative");
+        inp.value = Math.abs(val);
+
+        signBtn.onclick = function () {
+          rows[ri][ci] = -rows[ri][ci];
+          render();
+          updateTotals();
+          saveData();
+        };
+
+        inp.oninput = function (e) {
+          var digits = e.target.value.replace(/[^0-9]/g, "");
+          e.target.value = digits;
+          var magnitude = parseFloat(digits) || 0;
+          var currentSign = rows[ri][ci] < 0 ? -1 : 1;
+          rows[ri][ci] = magnitude * currentSign;
+          updateTotals();
+          saveData();
+        };
+
+        scoreCell.appendChild(signBtn);
+        scoreCell.appendChild(inp);
+        td.appendChild(scoreCell);
+        tr.appendChild(td);
+      });
+
+      var tdDel = document.createElement("td");
+      tdDel.className = "delcell";
+      var delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "delbtn";
+      delBtn.textContent = "×";
+      delBtn.onclick = function () {
+        rows.splice(ri, 1);
+        render();
+        saveData();
+      };
+      tdDel.appendChild(delBtn);
+      tr.appendChild(tdDel);
+
+      body.appendChild(tr);
+    });
+
+    updateTotals();
+    updateStickyHeight();
+  }
+
+  function updateTotals() {
+    document.getElementById("vanCount").textContent = rows.length;
+    var totals = names.map(function () { return 0; });
+    rows.forEach(function (row) {
+      row.forEach(function (v, i) { totals[i] += v; });
+    });
+
+    var totalRow = document.getElementById("totalRow");
+    totalRow.innerHTML = "";
+    totals.forEach(function (t) {
+      var cell = document.createElement("div");
+      cell.className = "total-cell";
+      cell.textContent = Math.round(t * 100) / 100;
+      totalRow.appendChild(cell);
+    });
+
+    var sum = totals.reduce(function (a, b) { return a + b; }, 0);
+    var checkEl = document.getElementById("checkSum");
+    var rounded = Math.round(sum * 100) / 100;
+    checkEl.textContent = rounded;
+    checkEl.style.color = rounded === 0 ? "var(--color-positive)" : "var(--color-negative)";
+  }
+
+  /* Đo chiều cao thanh sticky, dùng để chừa khoảng trống khi cuộn tới ô input,
+     tránh bị bàn phím ảo che mất thanh sticky */
+  function updateStickyHeight() {
+    var bar = document.getElementById("stickyBar");
+    if (bar) {
+      var h = bar.offsetHeight;
+      document.documentElement.style.setProperty("--sticky-height", h + "px");
+    }
+  }
+
+  window.addEventListener("resize", updateStickyHeight);
+  window.addEventListener("orientationchange", updateStickyHeight);
+
+  document.getElementById("addRow").addEventListener("click", function () {
+    rows.push(names.map(function () { return 0; }));
+    render();
+    saveData();
+  });
+
+  document.getElementById("clearAll").addEventListener("click", function () {
+    if (confirm("Xóa toàn bộ điểm đã nhập? Chắc chưa?!")) {
+      rows = [];
+      render();
+      saveData();
+    }
+  });
+
+  loadData();
+  render();
+</script>
+
+</body>
+</html>
