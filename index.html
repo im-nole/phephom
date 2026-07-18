@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>PHỎM v1</title>
+<title>PHỎM</title>
 
 <style>
   /* ============================================
@@ -60,7 +60,7 @@
 
   .stats {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 8px;
     margin-bottom: 10px;
   }
@@ -73,6 +73,50 @@
   }
   .stat .label { font-size: 13px; color: var(--text-muted); }
   .stat .value { font-size: 22px; font-weight: 600; margin-top: 2px; }
+
+  /* --- Ô "Ván cuối": ô nhập số ván đích để xét thắng chung cuộc --- */
+  #targetRounds {
+    width: 100%;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 600;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 3px 2px;
+    min-height: 30px;
+    margin-top: 2px;
+    color: var(--text-main);
+  }
+
+  /* --- Popup chúc mừng người thắng chung cuộc --- */
+  .winner-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .winner-overlay.is-visible { display: flex; }
+  .winner-card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 28px 24px;
+    text-align: center;
+    max-width: 320px;
+    width: 100%;
+  }
+  .winner-card .emoji { font-size: 40px; margin-bottom: 8px; }
+  .winner-card .title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .winner-card .name { font-size: 30px; font-weight: 700; color: var(--color-positive); margin-bottom: 18px; }
+  .winner-card button {
+    width: 100%;
+    background: var(--color-positive);
+    color: #fff;
+    border: none;
+  }
 
   .buttons {
     display: flex;
@@ -112,7 +156,7 @@
   }
 
   /* --- Hàng tổng điểm --- */
-  .total-row { 
+  .total-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     background: var(--card-bg);
@@ -130,7 +174,8 @@
   /* --- Bảng nhập điểm từng ván --- */
   table { width: 100%; border-collapse: collapse; margin-top: 10px; }
   td { padding: 5px 4px; text-align: center; vertical-align: middle; }
-  .rownum { display: none;
+  .rownum {
+    display: none; /* tạm ẩn - có thể bật lại sau này */
     width: 26px;
     color: var(--text-muted);
     font-size: 14px;
@@ -176,7 +221,7 @@
   }
   .score-input.is-negative { color: var(--color-negative); }
 
-  .delcell { width: 34px; display: none; }
+  .delcell { display: none; width: 34px; } /* tạm ẩn - có thể bật lại sau này */
   .delbtn {
     border: none;
     background: none;
@@ -198,7 +243,7 @@
 <body>
 
 <div class="wrap">
-  <h1>Gud Luck, bro!!!</h1>
+  <h1>PHỎM</h1>
 
   <div class="sticky-bar" id="stickyBar">
     <div class="stats">
@@ -207,7 +252,11 @@
         <div class="value" id="vanCount">0</div>
       </div>
       <div class="stat">
-        <div class="label">Tổng = 0</div>
+        <div class="label">Ván cuối</div>
+        <input type="number" id="targetRounds" inputmode="numeric" min="1">
+      </div>
+      <div class="stat">
+        <div class="label">Tổng kiểm tra</div>
         <div class="value" id="checkSum">0</div>
       </div>
     </div>
@@ -228,11 +277,29 @@
   <div class="saved-note" id="savedNote"></div>
 </div>
 
+<!-- Popup chúc mừng khi đạt đủ số ván "đích thắng" và có người dẫn đầu rõ ràng (không hòa) -->
+<div class="winner-overlay" id="winnerOverlay">
+  <div class="winner-card">
+    <div class="emoji">🎉</div>
+    <div class="title">Chúc mừng!</div>
+    <div class="name" id="winnerName">—</div>
+    <button type="button" id="winnerClose">Đóng</button>
+  </div>
+</div>
+
 <script>
   var STORAGE_KEY = "phom_score_data_v3";
   var colorClasses = ["col-cyan", "col-magenta", "col-yellow", "col-key"];
   var names = ["N", "Ma", "Tu", "Nu"];
   var rows = [];
+
+  /* ============================================
+     CẤU HÌNH - Tùy chỉnh tại đây
+     ============================================ */
+  var targetRounds = 13;        // số ván "đích" để xét thắng chung cuộc, đổi được qua ô input trên giao diện
+  var WINNER_CHECK_DELAY = 1200; // (ms) thời gian chờ không thao tác gì trước khi kiểm tra & hiện popup thắng
+  var winnerShown = false;       // cờ đánh dấu đã hiện popup cho lần đạt đích hiện tại, tránh hiện lặp lại
+  var winnerCheckTimer = null;   // biến giữ setTimeout để "debounce" - hủy lần chờ cũ mỗi khi có thao tác mới
 
   function loadData() {
     try {
@@ -243,6 +310,9 @@
           names = data.names;
           rows = data.rows;
         }
+        if (data.targetRounds) {
+          targetRounds = data.targetRounds;
+        }
       }
     } catch (e) {
       console.error("Không đọc được dữ liệu đã lưu:", e);
@@ -251,7 +321,7 @@
 
   function saveData() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ names: names, rows: rows }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ names: names, rows: rows, targetRounds: targetRounds }));
       var note = document.getElementById("savedNote");
       note.textContent = "Đã lưu lúc " + new Date().toLocaleTimeString("vi-VN");
     } catch (e) {
@@ -260,6 +330,9 @@
   }
 
   function render() {
+    var targetInput = document.getElementById("targetRounds");
+    targetInput.value = targetRounds;
+
     var nameRow = document.getElementById("nameRow");
     nameRow.innerHTML = "";
     names.forEach(function (n, i) {
@@ -310,6 +383,7 @@
           render();
           updateTotals();
           saveData();
+          scheduleWinnerCheck(ri);
         };
 
         inp.oninput = function (e) {
@@ -320,6 +394,7 @@
           rows[ri][ci] = magnitude * currentSign;
           updateTotals();
           saveData();
+          scheduleWinnerCheck(ri);
         };
 
         scoreCell.appendChild(signBtn);
@@ -336,6 +411,7 @@
       delBtn.textContent = "×";
       delBtn.onclick = function () {
         rows.splice(ri, 1);
+        winnerShown = false;
         render();
         saveData();
       };
@@ -382,6 +458,52 @@
     }
   }
 
+  /* --- Kiểm tra & hiện popup chúc mừng người thắng chung cuộc ---
+     Chỉ kiểm tra khi ván vừa sửa (rowIndex) chính là ván "đích".
+     Dùng debounce: mỗi lần gõ sẽ hủy hẹn giờ cũ và đặt hẹn giờ mới,
+     để tránh hiện popup ngay khi mới nhập xong ô đầu tiên trong ván đích. */
+  function scheduleWinnerCheck(rowIndex) {
+    if (rowIndex !== targetRounds - 1) return; // chỉ quan tâm đúng ván đích
+    if (winnerCheckTimer) clearTimeout(winnerCheckTimer);
+    winnerCheckTimer = setTimeout(function () {
+      checkAndShowWinner();
+    }, WINNER_CHECK_DELAY);
+  }
+
+  function checkAndShowWinner() {
+    if (winnerShown) return;               // đã hiện rồi thì thôi, tránh lặp lại
+    if (rows.length < targetRounds) return; // chưa đủ số ván đích
+
+    var totals = names.map(function () { return 0; });
+    rows.forEach(function (row) {
+      row.forEach(function (v, i) { totals[i] += v; });
+    });
+
+    var maxScore = Math.max.apply(null, totals);
+    var leaders = [];
+    totals.forEach(function (t, i) {
+      if (t === maxScore) leaders.push(i);
+    });
+
+    if (leaders.length !== 1) return; // hòa điểm cao nhất -> không hiện popup
+
+    var winnerName = names[leaders[0]] || "?";
+    document.getElementById("winnerName").textContent = winnerName;
+    document.getElementById("winnerOverlay").classList.add("is-visible");
+    winnerShown = true;
+  }
+
+  document.getElementById("winnerClose").addEventListener("click", function () {
+    document.getElementById("winnerOverlay").classList.remove("is-visible");
+  });
+
+  document.getElementById("targetRounds").addEventListener("input", function (e) {
+    var v = parseInt(e.target.value, 10);
+    targetRounds = (v && v > 0) ? v : 1;
+    winnerShown = false; // đổi đích thắng -> cho phép hiện popup lại nếu đủ điều kiện
+    saveData();
+  });
+
   window.addEventListener("resize", updateStickyHeight);
   window.addEventListener("orientationchange", updateStickyHeight);
 
@@ -392,8 +514,9 @@
   });
 
   document.getElementById("clearAll").addEventListener("click", function () {
-    if (confirm("Xóa toàn bộ điểm đã nhập? Chắc chưa?!")) {
+    if (confirm("Xóa hết toàn bộ điểm đã nhập? Không thể hoàn tác.")) {
       rows = [];
+      winnerShown = false;
       render();
       saveData();
     }
